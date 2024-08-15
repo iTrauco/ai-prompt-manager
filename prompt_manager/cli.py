@@ -1,13 +1,23 @@
 import click
 import os
 import requests
-from .prompt_operations import create_prompt, update_prompt, delete_prompt, archive_prompt
-from .lmm_interaction import send_prompt_to_llm
-from .config import LLM_API_URL, API_KEY
 
+# Function to load prompts configuration
+def load_prompts_config():
+    config_path = os.path.expanduser("~/.prompts/config")
+    if not os.path.isfile(config_path):
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    with open(config_path, "r") as config_file:
+        for line in config_file:
+            if line.strip():
+                key, value = line.strip().split("=", 1)
+                if key == "PROMPTS_DIR":
+                    return value
+    raise ValueError("PROMPTS_DIR not found in the configuration file")
 
-PROMPT_DIR = 'prompts'
-ARCHIVE_DIR = 'archives'
+# Load configuration
+PROMPTS_DIR = load_prompts_config()
+ARCHIVE_DIR = os.path.join(PROMPTS_DIR, 'archives')
 
 @click.group()
 def cli():
@@ -47,7 +57,7 @@ def archive_prompt(prompt_name):
 @click.argument("prompt_name")
 def send_prompt_to_llm(prompt_name):
     """Send a prompt to the LLM and get a response"""
-    prompt_path = os.path.join(PROMPT_DIR, prompt_name)
+    prompt_path = os.path.join(PROMPTS_DIR, prompt_name)
     if not os.path.exists(prompt_path):
         click.echo(f"Prompt file '{prompt_name}' does not exist.")
         return
@@ -64,5 +74,49 @@ def send_prompt_to_llm(prompt_name):
     else:
         click.echo(f"Failed to get response from LLM. Status code: {response.status_code}")
 
-if __name__ == '__main__':
+@cli.command()
+def list_prompts():
+    """List all prompt files"""
+    if not os.path.isdir(PROMPTS_DIR):
+        click.echo(f"Directory not found: {PROMPTS_DIR}")
+        return
+    prompts = [f for f in os.listdir(PROMPTS_DIR) if os.path.isfile(os.path.join(PROMPTS_DIR, f))]
+    click.echo("\n".join(prompts))
+
+# Add the implementation of the required functions
+def create_prompt(prompt_name):
+    prompt_path = os.path.join(PROMPTS_DIR, prompt_name)
+    if os.path.exists(prompt_path):
+        return f"Prompt file '{prompt_name}' already exists."
+    with open(prompt_path, 'w') as f:
+        f.write("")  # Create an empty file
+    return f"Prompt file '{prompt_name}' created."
+
+def update_prompt(prompt_name, new_content):
+    prompt_path = os.path.join(PROMPTS_DIR, prompt_name)
+    if not os.path.exists(prompt_path):
+        return f"Prompt file '{prompt_name}' does not exist."
+    with open(prompt_path, 'w') as f:
+        f.write(new_content)
+    return f"Prompt file '{prompt_name}' updated."
+
+def delete_prompt(prompt_name):
+    prompt_path = os.path.join(PROMPTS_DIR, prompt_name)
+    if not os.path.exists(prompt_path):
+        return f"Prompt file '{prompt_name}' does not exist."
+    os.remove(prompt_path)
+    return f"Prompt file '{prompt_name}' deleted."
+
+def archive_prompt(prompt_name):
+    prompt_path = os.path.join(PROMPTS_DIR, prompt_name)
+    if not os.path.exists(prompt_path):
+        return f"Prompt file '{prompt_name}' does not exist."
+    archive_path = os.path.join(ARCHIVE_DIR, prompt_name)
+    if not os.path.exists(ARCHIVE_DIR):
+        os.makedirs(ARCHIVE_DIR)
+    os.rename(prompt_path, archive_path)
+    return f"Prompt file '{prompt_name}' archived."
+
+# Only run if this file is executed directly
+if __name__ == "__main__":
     cli()
